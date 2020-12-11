@@ -21,7 +21,7 @@ import (
 	"github.com/prometheus/common/version"
 	"gopkg.in/alecthomas/kingpin.v2"
 
-	"github.com/go-resty/resty"
+	"github.com/go-resty/resty/v2"
 )
 
 const namespace = "qumulo"
