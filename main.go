@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"sync"
 	"time"
@@ -45,7 +44,7 @@ type Exporter struct {
 	mutex     sync.RWMutex
 	fetchInfo func() (io.ReadCloser, error)
 	fetchStat func() (io.ReadCloser, error)
-rm -
+
 	up                             prometheus.Gauge
 	totalScrapes, csvParseFailures prometheus.Counter
 	serverMetrics                  map[int]metricInfo
