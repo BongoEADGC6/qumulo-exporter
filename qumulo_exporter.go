@@ -24,7 +24,10 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-const namespace = "qumulo"
+const (
+	namespace  = "qumulo"
+	tokenHours = 4 //hours
+)
 
 // AuthSuccess Token auth for API
 type AuthSuccess struct {
@@ -39,8 +42,9 @@ type metricInfo struct {
 // Exporter collects Qumulo stats from the given URI and exports them using
 // the prometheus metrics package.
 type Exporter struct {
-	URI       string
-	Token     string
+	URI   string
+	Token string
+	//Timer     *time.Timer
 	mutex     sync.RWMutex
 	fetchInfo func() (io.ReadCloser, error)
 	fetchStat func() (io.ReadCloser, error)
@@ -69,10 +73,11 @@ func NewExporter(uri string, sslVerify bool, username, password string, timeout 
 	}
 	var fetchInfo func() (io.ReadCloser, error)
 	var fetchStat func() (io.ReadCloser, error)
-
+	//timer := time.NewTimer(time.Hour * time.Duration(tokenHours))
 	return &Exporter{
-		URI:       uri,
-		Token:     token,
+		URI:   uri,
+		Token: token,
+
 		fetchInfo: fetchInfo,
 		fetchStat: fetchStat,
 		up: prometheus.NewGauge(prometheus.GaugeOpts{
@@ -181,7 +186,7 @@ func main() {
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
 	logger := promlog.New(promlogConfig)
-
+	level.Info(logger).Log("msg", "Attempting initial auth to "+*qumAPIURI)
 	exporter, err := NewExporter(*qumAPIURI, *qumAPISSLVerify, *qumAPIUsername, *qumAPIPassword, *Timeout, logger)
 	if err != nil {
 		level.Error(logger).Log("msg", "Error creating an exporter", "err", err)
