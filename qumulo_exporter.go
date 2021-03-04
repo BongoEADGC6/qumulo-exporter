@@ -44,7 +44,7 @@ type metricInfo struct {
 type Exporter struct {
 	URI   string
 	Token string
-	//Timer     *time.Timer
+
 	mutex     sync.RWMutex
 	fetchInfo func() (io.ReadCloser, error)
 	fetchStat func() (io.ReadCloser, error)
