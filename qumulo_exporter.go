@@ -130,17 +130,11 @@ func getToken(apiuri, username, password string, sslVerify bool) (string, error)
 // Describe describes all the metrics ever exported by the HAProxy exporter. It
 // implements prometheus.Collector.
 func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
-	//for _, m := range frontendMetrics {
-	//	ch <- m.Desc
-	//}
-	//for _, m := range backendMetrics {
-	//	ch <- m.Desc
-	//}
-	//for _, m := range e.serverMetrics {
-	//	ch <- m.Desc
-	//}
 	ch <- qumuloUp
 	ch <- e.totalScrapes.Desc()
+	//ch <- getIOPS
+	//ch <- getActivity
+
 }
 
 // Collect fetches the stats from configured HAProxy location and delivers them
@@ -153,6 +147,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 
 	ch <- prometheus.MustNewConstMetric(qumuloUp, prometheus.GaugeValue, up)
 	ch <- e.totalScrapes
+	//e.readChannelStats(lines, ch)
 }
 
 func (e *Exporter) scrape(ch chan<- prometheus.Metric) (up float64) {
@@ -176,9 +171,7 @@ func main() {
 		qumAPISSLVerify = kingpin.Flag("qumuloapi.ssl-verify", "Flag that enables SSL certificate verification for the scrape URI").Default("true").Bool()
 		qumAPIUsername  = kingpin.Flag("qumuloapi.username", "Username to authenticate with API.").Required().String()
 		qumAPIPassword  = kingpin.Flag("qumuloapi.password", "Password to authenticate with API.").Required().String()
-		//haProxyServerMetricFields  = kingpin.Flag("haproxy.server-metric-fields", "Comma-separated list of exported server metrics. See http://cbonte.github.io/haproxy-dconv/configuration-1.5.html#9.1").Default(serverMetrics.String()).String()
-		//ExcludeStates = kingpin.Flag("haproxy.server-exclude-states", "Comma-separated list of exported server states to exclude. See https://cbonte.github.io/haproxy-dconv/1.8/management.html#9.1, field 17 statuus").Default(excludedServerStates).String()
-		Timeout = kingpin.Flag("qumuloapi.timeout", "Timeout for trying to get stats from Qumulo API.").Default("5s").Duration()
+		Timeout         = kingpin.Flag("qumuloapi.timeout", "Timeout for trying to get stats from Qumulo API.").Default("5s").Duration()
 	)
 	promlogConfig := &promlog.Config{}
 	flag.AddFlags(kingpin.CommandLine, promlogConfig)
@@ -186,14 +179,17 @@ func main() {
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
 	logger := promlog.New(promlogConfig)
+	level.Info(logger).Log("msg", "Starting qumulo_exporter", "version", version.Info())
+	level.Info(logger).Log("msg", "Build context", "build_context", version.BuildContext())
 	level.Info(logger).Log("msg", "Attempting initial auth to "+*qumAPIURI)
+
 	exporter, err := NewExporter(*qumAPIURI, *qumAPISSLVerify, *qumAPIUsername, *qumAPIPassword, *Timeout, logger)
 	if err != nil {
 		level.Error(logger).Log("msg", "Error creating an exporter", "err", err)
 		os.Exit(1)
 	}
 	prometheus.MustRegister(exporter)
-	//prometheus.MustRegister(version.NewCollector(exporter))
+	prometheus.MustRegister(version.NewCollector("qumulo_exporter"))
 
 	http.Handle(*metricsPath, promhttp.Handler())
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -205,6 +201,8 @@ func main() {
              </body>
              </html>`))
 	})
+
+	level.Info(logger).Log("msg", "Listening on", "address:", *listenAddress)
 	if err := http.ListenAndServe(*listenAddress, nil); err != nil {
 		level.Error(logger).Log("msg", "Error starting HTTP server", "err", err)
 		os.Exit(1)
