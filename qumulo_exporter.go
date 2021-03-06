@@ -45,6 +45,8 @@ type Exporter struct {
 	URI   string
 	Token string
 
+	HTTPClient *resty.Client
+
 	mutex     sync.RWMutex
 	fetchInfo func() (io.ReadCloser, error)
 	fetchStat func() (io.ReadCloser, error)
@@ -57,8 +59,9 @@ type Exporter struct {
 }
 
 var (
-	qumuloUp = prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "up"), "Was the last scrape of Qumulo successful.", nil, nil)
-	iops     = prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "iops"), "IOPs for each client.", nil, nil)
+	qumuloInfo = prometheus.NewDesc(prometheus.BuildFQName(namespace, "version", "info"), "Qumulo cluster version info.", []string{"release_date", "version"}, nil)
+	qumuloUp   = prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "up"), "Was the last scrape of Qumulo successful.", nil, nil)
+	iops       = prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "iops"), "IOPs for each client.", nil, nil)
 )
 
 // Exporter collects HAProxy stats from the given URI and exports them using
@@ -67,7 +70,9 @@ var (
 // NewExporter returns an initialized Exporter.
 func NewExporter(uri string, sslVerify bool, username, password string, timeout time.Duration, logger log.Logger) (*Exporter, error) {
 	//u, err := url.Parse(uri)
-	token, err := getToken(uri, username, password, sslVerify)
+	client := resty.New()
+	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: sslVerify})
+	token, err := getToken(client, uri, username, password, sslVerify)
 	if err != nil {
 		level.Error(logger).Log("msg", "Error creating an exporter", "err", err)
 		os.Exit(1)
@@ -76,6 +81,8 @@ func NewExporter(uri string, sslVerify bool, username, password string, timeout 
 	return &Exporter{
 		URI:   uri,
 		Token: token,
+
+		HTTPClient: client,
 
 		up: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
@@ -91,18 +98,20 @@ func NewExporter(uri string, sslVerify bool, username, password string, timeout 
 	}, nil
 }
 
-func getIOPS() prometheus.Metric {
-	//uri := "analytics/iops"uri := "analytics/iops"
-	return prometheus.MustNewConstMetric(iops, prometheus.GaugeValue, 1)
-}
+/*
+func getFileSystem(client *resty.Client)  {
+	uri := "/file-system"
+	resp, err := client.
+		SetAuthToken(e.Token).
+		Get(e.URI + "/version")
+	return 1
+}*/
 
 //func getActivity(token string) {
 //	uri := "analytics/activity/current"
 //}
 
-func getToken(apiuri, username, password string, sslVerify bool) (string, error) {
-	client := resty.New()
-	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: sslVerify})
+func getToken(client *resty.Client, apiuri, username, password string, sslVerify bool) (string, error) {
 	reqBody := map[string]string{
 		"username": username,
 		"password": password,
@@ -125,13 +134,14 @@ func getToken(apiuri, username, password string, sslVerify bool) (string, error)
 	return auth.Token, nil
 }
 
+
+func (e *Exporter) scrape(
 // Describe describes all the metrics ever exported by the HAProxy exporter. It
 // implements prometheus.Collector.
 func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
+	ch <- qumuloInfo
 	ch <- qumuloUp
 	ch <- e.totalScrapes.Desc()
-	ch <- iops
-	//ch <- getActivity
 }
 
 // Collect fetches the stats from configured HAProxy location and delivers them
@@ -143,18 +153,12 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	up := e.scrape(ch)
 	ch <- prometheus.MustNewConstMetric(qumuloUp, prometheus.GaugeValue, up)
 
-	ch <- getIOPS()
 	ch <- e.totalScrapes
-	//e.readChannelStats(lines, ch)
 }
 
 func (e *Exporter) scrape(ch chan<- prometheus.Metric) (up float64) {
 	e.totalScrapes.Inc()
-	// introduce for loop
-	//body, err := e.fetchStat()
-	client := resty.New()
-	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
-	resp, err := client.R().
+	resp, err := e.HTTPClient.R().
 		SetHeader("Content-Type", "application/json").
 		SetAuthToken(e.Token).
 		Get(e.URI + "/version")
