@@ -134,8 +134,6 @@ func getToken(client *resty.Client, apiuri, username, password string, sslVerify
 	return auth.Token, nil
 }
 
-
-func (e *Exporter) scrape(
 // Describe describes all the metrics ever exported by the HAProxy exporter. It
 // implements prometheus.Collector.
 func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
